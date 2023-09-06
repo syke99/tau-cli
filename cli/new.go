@@ -30,6 +30,9 @@ import (
 )
 
 func New() (*cli.App, error) {
+	// configure the Env and Color flags to
+	// read from the TAU_ENV and TAU_COLOR
+	// environment variables, respectively
 	globalFlags := []cli.Flag{
 		flags.Env,
 		flags.Color,
@@ -40,20 +43,40 @@ func New() (*cli.App, error) {
 		Flags:                  globalFlags,
 		EnableBashCompletion:   true,
 		Before: func(ctx *cli.Context) error {
+			// pass ctx to states.New() to
+			// create a new internal context
+			// with a cancel func (set to Context
+			// and ContextC, respectively, inside
+			// ../states/context.go) to guarantee
+			// there isn't a nil context internally
+			// and allow for internal context cancellation
 			states.New(ctx.Context)
 
+			// check to see if a (terminal) color
+			// has been set in the context (via reading
+			// from the loaded TAU_COLOR env var above),
+			// and if so, guarantee that the value is one
+			// of the valid options
 			color, err := flags.GetColor(ctx)
 			if err != nil {
+				// return err if not nil to prevent
+				// unnecessary completion of App setup
 				return err
 			}
 
+			// disable terminal color(s) if Color flag
+			// was set to "never" (why a switch and not
+			// an if statement? possibly future options?)
 			switch color {
 			case flags.ColorNever:
 				pterm.DisableColor()
 			}
 
+			// return nil if App setup successful
 			return nil
 		},
+		// add login, current, exit, and dream
+		// Commands to App
 		Commands: []*cli.Command{
 			login.Command,
 			current.Command,
@@ -62,6 +85,9 @@ func New() (*cli.App, error) {
 		},
 	}
 
+	// attach the below Commands as SubCommands
+	// to all the base commands found in
+	// tau-cli/cli/common/base_commands.go
 	common.Attach(app,
 		project.New,
 		application.New,
@@ -80,6 +106,15 @@ func New() (*cli.App, error) {
 		logs.New,
 	)
 
+	// add the autocomplete and version commands to the app
+	//
+	// ( curious as to why these aren't added with the rest of
+	// the commands on line 78? adding these two commands here creates
+	// unnecessary memory (the slice of *cli.Command is an extra
+	// slice, not needed if added above, and if the array backing
+	// app.Commands doesn't have the capacity, it will have to be
+	// re-allocated and re-sliced, creating more memory for the GC
+	// to have to clean up) unless command ordering is of importance)
 	app.Commands = append(app.Commands, []*cli.Command{
 		autocomplete.Command,
 		version.Command,

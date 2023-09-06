@@ -28,6 +28,10 @@ var Command = &cli.Command{
 }
 
 func Run(ctx *cli.Context) error {
+	// get available profiles after reading the config (will
+	// autoload a new config if a config has not yet been set)
+	// (options var should be renamed to something like nameOpts
+	// to avoid variable/package name collisions)
 	_default, options, err := loginLib.GetProfiles()
 	if err != nil {
 		return loginI18n.GetProfilesFailed(err)
@@ -40,12 +44,22 @@ func Run(ctx *cli.Context) error {
 
 	// Selection
 	var name string
+	// if a name (alias -n) flag
+	// was provided by the user, set
+	// the name variable to the value
+	// set by that flag if it exists in
+	// the options returned on line 33,
+	// or error if it doesn't exist
 	if ctx.IsSet(flags.Name.Name) {
 		name = ctx.String(flags.Name.Name)
 
 		if !slices.Contains(options, name) {
 			return loginI18n.DoesNotExistIn(name, options)
 		}
+		// if a name (alias -n) flag was
+		// not provided by the user, prompt them
+		// to select a profile from the options
+		// returned on line 33 to use
 	} else {
 		name, err = prompts.SelectInterface(options, loginPrompts.SelectAProfile, _default)
 		if err != nil {
@@ -53,5 +67,7 @@ func Run(ctx *cli.Context) error {
 		}
 	}
 
+	// select the chosen profile, overriding the default name
+	// if the user provided the set-default (alias -d) flag
 	return Select(ctx, name, ctx.Bool(loginFlags.SetDefault.Name))
 }

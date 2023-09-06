@@ -9,10 +9,18 @@ type basicFunction func() Basic
 // Used to attach subCommands to their relative base commands
 // Ex: `tau new project`  project is attached to the new command
 func Attach(app *cli.App, commands ...basicFunction) {
+	// attach the commands as SubCommands to
+	// all the base commands found in
+	// tau-cli/cli/common/base_commands.go
 	for _, cmdFunc := range commands {
 		attachCommand(cmdFunc())
 	}
 
+	// if any of the base commands found in
+	// tau-cli/cli/common/base_commands.go
+	// now have SubCommands added, add that
+	// base command (with attached
+	// SubCommands) to the app's commands
 	for _, cmd := range []*cli.Command{
 		_new,
 		_edit,
@@ -32,6 +40,9 @@ func Attach(app *cli.App, commands ...basicFunction) {
 	}
 }
 
+// attachCommand attaches the Basic cmd to all the base Tau commands
+// as sub commands and initializes each with their base options, then
+// pluralizes all subcommand aliases of the "list" base command
 func attachCommand(cmd Basic) {
 	baseCmd, baseOps := cmd.Base()
 
@@ -60,6 +71,8 @@ func attachCommand(cmd Basic) {
 	}
 }
 
+// adds plural alias forms to the lists of Aliases for
+// a command after being initialized
 func pluralAlias(command *cli.Command) {
 	if command.Aliases == nil {
 		command.Aliases = make([]string, 0)
