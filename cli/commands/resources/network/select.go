@@ -33,12 +33,17 @@ func _select(ctx *cli.Context) error {
 		return networkI18n.FlagError()
 	}
 
+	// returns the selected profile, once the user has logged
+	// in, or prompts them to login
 	profile, err := loginLib.GetSelectedProfile()
 	if err != nil {
 		return err
 	}
 
 	switch {
+	// if an FDQN (fully qualified domain name) was provided,
+	// validate it, and if it's a new FQDN, add it to the
+	// profile's history of selected networks
 	case ctx.IsSet(networkFlags.FQDN.Name):
 		profile.NetworkType = common.RemoteNetwork
 		profile.Network = ctx.String(networkFlags.FQDN.Name)
@@ -51,6 +56,12 @@ func _select(ctx *cli.Context) error {
 			profile.History = append(profile.History, profile.Network)
 		}
 
+	// if a Universe name was provided (for local Dreamland cloud
+	// instances), verify that the Dreamland cloud is in good Status
+	// and if so, set the profile's network type to a Dreamland cloud
+	// and the specific network to the provided Universe name. If a
+	// Dreamland instance has not been started yet, dreamland.Client
+	// will start one before verifying its status
 	case ctx.IsSet(networkFlags.Universe.Name):
 		dreamClient, err := dreamland.Client(ctx.Context)
 		if err != nil {
@@ -70,12 +81,18 @@ func _select(ctx *cli.Context) error {
 
 		profile.NetworkType = common.DreamlandNetwork
 		profile.Network = universeName
+	// if no FDQN or Universe name were provided, verify (and if needed,
+	// start) a Dreamland instance
 	default:
 		dreamClient, err := dreamland.Client(ctx.Context)
 		if err != nil {
 			return fmt.Errorf("creating dreamland client failed with: %w", err)
 		}
 
+		// after the Dreamland client has been created/verified,
+		// add it as a network type option for the user to select
+		// (err should immediately be returned if not nil here to
+		// prevent unnecessary continuation of work)
 		networkSelections := []string{common.RemoteNetwork}
 		if _, err := dreamClient.Status(); err == nil {
 			networkSelections = append(networkSelections, common.DreamlandNetwork)
@@ -88,7 +105,11 @@ func _select(ctx *cli.Context) error {
 			prev = append(prev, profile.NetworkType)
 		}
 
+		// prompt the user to select whether they'd like to connect to a local
+		// Dreamland network instance or a remote network
 		network := prompts.GetOrAskForSelection(ctx, "Network", prompts.NetworkPrompts, networkSelections, prev...)
+		// if the user selects a remote network, prompt the user to enter an FQDN,
+		// and then attempt to validate it
 		if network == common.RemoteNetwork {
 			profile.NetworkType = common.RemoteNetwork
 			profile.Network = prompts.GetOrRequireAString(ctx, "", prompts.FQDN, validate.FQDNValidator, profile.Network)
@@ -100,6 +121,8 @@ func _select(ctx *cli.Context) error {
 				profile.History = append(profile.History, profile.Network)
 			}
 
+			// if the user selects a local Dreamland network instance,
+			// verify the status of the network
 		} else if network == common.DreamlandNetwork {
 			universes, err := dreamClient.Status()
 			if err != nil {
@@ -111,6 +134,8 @@ func _select(ctx *cli.Context) error {
 				universeNames = append(universeNames, name)
 			}
 
+			// and then prompt the user to select the Universe inside the Dreamland
+			// network instance they would like to choose
 			profile.Network, err = prompts.SelectInterface(universeNames, prompts.Universe, "")
 			if err != nil {
 				return fmt.Errorf("universe selection failed with: %w", err)
@@ -122,14 +147,16 @@ func _select(ctx *cli.Context) error {
 	}
 
 	config.Profiles().Set(profile.Name(), profile)
+
+	// set the running Tau environment's Network and network URL
 	if err := env.SetSelectedNetwork(ctx, profile.NetworkType); err != nil {
 		return err
 	}
-
 	if err := env.SetNetworkUrl(ctx, profile.Network); err != nil {
 		return err
 	}
 
+	// prompt the user that they have successfully selected a network
 	networkI18n.Success(profile.Network)
 
 	return nil
